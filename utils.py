@@ -1,5 +1,3 @@
-# utils.py
-
 import re
 import string
 import warnings
@@ -9,44 +7,18 @@ from collections import Counter
 
 warnings.filterwarnings("ignore")
 
-# NLP
 import nltk
 
-try:
-    nltk.data.find("corpora/stopwords")
-except:
-    nltk.download("stopwords")
-
-try:
-    nltk.data.find("corpora/wordnet")
-except:
-    nltk.download("wordnet")
-
-try:
-    nltk.data.find("corpora/omw-1.4")
-except:
-    nltk.download("omw-1.4")
-
-try:
-    nltk.data.find("tokenizers/punkt")
-except:
-    nltk.download("punkt")
+nltk.download("stopwords")
+nltk.download("wordnet")
+nltk.download("omw-1.4")
 
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
-
-# ---------------------------------------------------
-# Global Objects
-# ---------------------------------------------------
 
 STOP_WORDS = set(stopwords.words("english"))
 LEMMATIZER = WordNetLemmatizer()
 
-
-# ---------------------------------------------------
-# Text Cleaning Functions
-# ---------------------------------------------------
 
 def remove_urls(text):
     return re.sub(r"http\S+|www\S+|https\S+", "", text)
@@ -68,28 +40,16 @@ def remove_extra_spaces(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
-# ---------------------------------------------------
-# Main Preprocessing Function
-# ---------------------------------------------------
-
 def preprocess_text(text):
-    """
-    Complete NLP preprocessing pipeline
-    """
 
     if pd.isna(text):
         return ""
 
-    text = str(text)
-
-    text = text.lower()
+    text = str(text).lower()
 
     text = remove_urls(text)
-
     text = remove_html(text)
-
     text = remove_numbers(text)
-
     text = remove_special_characters(text)
 
     text = text.translate(
@@ -98,7 +58,8 @@ def preprocess_text(text):
 
     text = remove_extra_spaces(text)
 
-    tokens = word_tokenize(text)
+    # No punkt dependency
+    tokens = text.split()
 
     tokens = [
         LEMMATIZER.lemmatize(word)
@@ -109,20 +70,12 @@ def preprocess_text(text):
     return " ".join(tokens)
 
 
-# ---------------------------------------------------
-# Dataset Loading
-# ---------------------------------------------------
-
 def load_and_merge_dataset(
     fake_path="Fake.csv",
     true_path="True.csv"
 ):
-    """
-    Merge Fake.csv and True.csv
-    """
 
     fake_df = pd.read_csv(fake_path)
-
     true_df = pd.read_csv(true_path)
 
     fake_df["label"] = 0
@@ -150,158 +103,35 @@ def load_and_merge_dataset(
     return combined_df
 
 
-# ---------------------------------------------------
-# Dataset Summary
-# ---------------------------------------------------
+def create_metadata(
+    model_name,
+    accuracy,
+    dataset_size,
+    tfidf_features=10000
+):
 
-def dataset_summary(df):
+    from datetime import datetime
 
-    summary = {
-        "rows": df.shape[0],
-        "columns": df.shape[1],
-        "missing_values":
-            int(df.isnull().sum().sum()),
-        "duplicates":
-            int(df.duplicated().sum()),
-        "fake_news":
-            int((df["label"] == 0).sum()),
-        "real_news":
-            int((df["label"] == 1).sum())
+    return {
+        "best_model": model_name,
+        "accuracy": round(accuracy, 4),
+        "dataset_size": dataset_size,
+        "training_date":
+            datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        "tfidf_max_features":
+            tfidf_features,
+        "ngram_range":
+            "(1,2)"
     }
 
-    return summary
-
-
-# ---------------------------------------------------
-# Article Length Features
-# ---------------------------------------------------
-
-def add_length_features(df):
-
-    if "text" not in df.columns:
-        return df
-
-    df["article_length"] = (
-        df["text"]
-        .astype(str)
-        .apply(len)
-    )
-
-    df["word_count"] = (
-        df["text"]
-        .astype(str)
-        .apply(lambda x: len(x.split()))
-    )
-
-    return df
-
-
-# ---------------------------------------------------
-# Most Common Words
-# ---------------------------------------------------
-
-def get_top_words(
-    texts,
-    n=20
-):
-
-    all_words = []
-
-    for text in texts:
-
-        all_words.extend(
-            str(text).split()
-        )
-
-    counter = Counter(all_words)
-
-    top_words = counter.most_common(n)
-
-    words = [i[0] for i in top_words]
-
-    counts = [i[1] for i in top_words]
-
-    return pd.DataFrame({
-        "word": words,
-        "count": counts
-    })
-
-
-# ---------------------------------------------------
-# Class-wise Common Words
-# ---------------------------------------------------
-
-def get_fake_real_words(
-    df,
-    top_n=20
-):
-
-    fake_text = " ".join(
-        df[df["label"] == 0]
-        ["clean_text"]
-        .astype(str)
-    )
-
-    real_text = " ".join(
-        df[df["label"] == 1]
-        ["clean_text"]
-        .astype(str)
-    )
-
-    fake_words = get_top_words(
-        [fake_text],
-        top_n
-    )
-
-    real_words = get_top_words(
-        [real_text],
-        top_n
-    )
-
-    return fake_words, real_words
-
-
-# ---------------------------------------------------
-# TF-IDF Keywords
-# ---------------------------------------------------
-
-def get_top_tfidf_keywords(
-    vectorizer,
-    top_n=30
-):
-    """
-    Extract top TF-IDF terms
-    """
-
-    try:
-
-        feature_names = (
-            vectorizer
-            .get_feature_names_out()
-        )
-
-        return pd.DataFrame({
-            "keyword":
-                feature_names[:top_n]
-        })
-
-    except:
-
-        return pd.DataFrame()
-
-
-# ---------------------------------------------------
-# Prediction Utility
-# ---------------------------------------------------
 
 def predict_news(
     text,
     model,
     vectorizer
 ):
-    """
-    Predict Fake / Real News
-    """
 
     cleaned_text = preprocess_text(text)
 
@@ -310,8 +140,6 @@ def predict_news(
     )
 
     prediction = model.predict(vector)[0]
-
-    confidence = 0
 
     try:
 
@@ -341,87 +169,6 @@ def predict_news(
     }
 
 
-# ---------------------------------------------------
-# Batch Prediction
-# ---------------------------------------------------
-
-def batch_predict(
-    dataframe,
-    model,
-    vectorizer,
-    text_column="text"
-):
-
-    df = dataframe.copy()
-
-    df["Prediction"] = df[text_column].apply(
-        lambda x:
-        predict_news(
-            x,
-            model,
-            vectorizer
-        )["label"]
-    )
-
-    return df
-
-
-# ---------------------------------------------------
-# Model Metadata
-# ---------------------------------------------------
-
-def create_metadata(
-    model_name,
-    accuracy,
-    dataset_size,
-    tfidf_features=10000
-):
-
-    from datetime import datetime
-
-    metadata = {
-        "best_model": model_name,
-        "accuracy": round(
-            accuracy,
-            4
-        ),
-        "dataset_size": dataset_size,
-        "training_date":
-            datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-        "tfidf_max_features":
-            tfidf_features,
-        "ngram_range":
-            "(1,2)"
-    }
-
-    return metadata
-
-
-# ---------------------------------------------------
-# Safe Loader
-# ---------------------------------------------------
-
-def safe_read_csv(path):
-
-    try:
-
-        return pd.read_csv(path)
-
-    except Exception as e:
-
-        print(
-            f"Error loading file: {e}"
-        )
-
-        return pd.DataFrame()
-
-
-# ---------------------------------------------------
-# Application Health Check
-# ---------------------------------------------------
-
 def check_required_files():
 
     import os
@@ -432,44 +179,7 @@ def check_required_files():
         "model_metadata.pkl"
     ]
 
-    status = {}
-
-    for file in files:
-
-        status[file] = os.path.exists(file)
-
-    return status
-
-
-# ---------------------------------------------------
-# Text Statistics
-# ---------------------------------------------------
-
-def text_statistics(df):
-
-    if "text" not in df.columns:
-
-        return {}
-
-    lengths = (
-        df["text"]
-        .astype(str)
-        .apply(len)
-    )
-
-    stats = {
-
-        "avg_length":
-            round(lengths.mean(), 2),
-
-        "max_length":
-            int(lengths.max()),
-
-        "min_length":
-            int(lengths.min()),
-
-        "median_length":
-            int(lengths.median())
+    return {
+        file: os.path.exists(file)
+        for file in files
     }
-
-    return stats
